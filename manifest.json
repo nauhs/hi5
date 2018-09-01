@@ -1,0 +1,24 @@
+{
+	"manifest_version" : 2,
+	"name" : "Hi5!",
+	"description" : "Hi5!",
+	"version" : "1.0",
+	
+	"browser_action":{
+		"default_icon" : "icon.png"
+	},
+	
+	"content_scripts": [
+		{
+		  "matches": ["<all_urls>"],
+		  "js": ["mine.js"],
+		  "css": ["styles.css"]
+		}
+	  ],
+	
+	"permissions": [
+		"activeTab",
+		"tabs",
+		"https://ajax.googleapis.com/"
+	]
+}

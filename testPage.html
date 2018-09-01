@@ -1,0 +1,55 @@
+<!doctype html>
+<!--
+ This page is shown when the extension button is clicked, because the
+ "browser_action" field in manifest.json contains the "default_popup" key with
+ value "popup.html".
+ -->
+<html>
+  <head>
+    <title>Stuff</title>
+    <style>
+      body {
+        font-family: "Segoe UI", "Lucida Grande", Tahoma, sans-serif;
+        font-size: 100%;
+      }
+      #status {
+        /* avoid an excessively wide status text */
+        white-space: pre;
+        text-overflow: ellipsis;
+        overflow: hidden;
+        max-width: 400px;
+      }
+	  
+	  
+    </style>
+  </head>
+  <body>
+	<h2>Living Things</h2>
+	<p><h3>Animals</h3> Living things with brains.
+	<ul>
+		<li><h4>Pets</h4>These ones like humans.
+			<ul><span><li>Cats</li>
+				
+				<li>Dogs</li>
+				<li>Horses</li></span>
+			</ul></li>
+		<li><h4>Non Pets</h4>These ones might hurt us.
+			<ul><li>Sharks</li>
+				<li>Owls</li>
+				<li>Wolves</li>
+				</ul></li>
+	</ul>
+	</p><p><h3>Plants</h3>Living things that don't have brains.
+	<ul>
+		<li><h4>Food</h4>Tastes good
+			<ul><li>Broccoli</li>
+				<li>Corn</li>
+				<li>Pears</li>
+				</ul>
+			</li>
+			</ul>
+	</p>
+	
+  </body>
+</html>
+
