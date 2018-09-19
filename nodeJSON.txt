@@ -1,0 +1,19 @@
+{pathToFirstNode: "BODY/DIV[2]/SECTION[1]/SECTION[1]/DIV[1]/DIV[1]/H2[1]/text()[1]", firstNodeOffset: 42, firstNodeTextHash: 103196, pathToLastNode: "BODY/DIV[2]/SECTION[1]/SECTION[1]/DIV[1]/DIV[1]/H2[1]/text()[1]", lastNodeOffset: 57, …}
+firstNodeOffset
+:
+42
+firstNodeTextHash
+:
+103196
+lastNodeOffset
+:
+57
+lastNodeTextHash
+:
+3314326
+pathToFirstNode
+:
+"BODY/DIV[2]/SECTION[1]/SECTION[1]/DIV[1]/DIV[1]/H2[1]/text()[1]"
+pathToLastNode
+:
+"BODY/DIV[2]/SECTION[1]/SECTION[1]/DIV[1]/DIV[1]/H2[1]/text()[1]
