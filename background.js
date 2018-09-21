@@ -11,7 +11,6 @@ chrome.runtime.onMessage.addListener(function(request, sender, sendResponse){
 });
 
 chrome.webNavigation.onCompleted.addListener(function(details) {
-	
 	if(details.frameId === 0){
 		console.log('web navigation completed...');
 		console.log(details);

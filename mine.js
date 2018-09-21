@@ -22,10 +22,8 @@ document.addEventListener('mouseup', function() {
 	
 	insertHighlightData(highlightData);
 	
-	
 	applyHighlight(highlightData);
 	
-	highlights.push(highlightData);
 	
 	let updateRequest = {
 		updatetype: UpdateType.insert,
@@ -67,6 +65,8 @@ function getHighlightDataFromSelection(selection){
 					// endNodeTextHash: selection.toString(),
 					// range: void(0)
 	// };
+	
+	// TODO: we need to handle scenario where parent node is a span we created
 	
 	let highlightData = {
 		pathToStartNodeParent: getPathTo(startNode.parentNode),
@@ -257,7 +257,11 @@ function getContainingNodeAndOffsetFromParentPathAndOffset(parentPath, offsetRel
 
 function getInBetweenNodes(highlightData){
 	
-	if(highlightData.pathToStartNode === highlightData.pathToEndNode)
+	
+	console.log('in between nodes:');
+	console.log(highlightData);
+	
+	if(highlightData.pathToStartNodeParent === highlightData.pathToEndNodeParent)
 		return [];
 	
 	let sharedAncestorNode = highlightData.range.commonAncestorContainer;
@@ -280,9 +284,8 @@ function getInBetweenNodes(highlightData){
 	console.log('FIRST NODE BRANCH:');
 	let currentNode = getRightSideSiblingOrAncestor(startNode);
 	while(currentNode && currentNode.parentNode !== sharedAncestorNode){
-		
 		nodesInBetween.push(currentNode);
-		console.log(getPathTo(currentNode));
+		console.log(getPathTo(currentNode));	
 		currentNode = getRightSideSiblingOrAncestor(currentNode, sharedAncestorNode);
 	}
 	
@@ -316,6 +319,11 @@ function getInBetweenNodes(highlightData){
 		currentNode = currentNode.nextSibling;
 	}
 	
+	// filter out empy text nodes
+	nodesInBetween = nodesInBetween.filter(function(node){
+		return /\S/.test(node.textContent);
+	});
+	
 	return nodesInBetween;
 }
 
@@ -326,51 +334,48 @@ function applyHighlight(highlightData){
 	let start = getContainingNodeAndOffsetFromParentPathAndOffset(highlightData.pathToStartNodeParent, highlightData.startOffsetRelativeToParent);
 	let end = getContainingNodeAndOffsetFromParentPathAndOffset(highlightData.pathToEndNodeParent, highlightData.endOffsetRelativeToParent);
 	
-	
-	// console.log('highlight data:');
-	// console.log(highlightData);
-	
 	if(start.containingNode === end.containingNode){
 		let range = insertRangeWithHighlightedNode(start.containingNode, start.offset, end.offset);
 		highlightData.range = range;
 		return;
 	}
 	
-	let newStartNode = insertRangeWithHighlightedNode(start.containingNode, start.offset, start.containingNode.length).startContainer;
-	let newEndNode = insertRangeWithHighlightedNode(end.containingNode, 0, end.containingNode.length).startContainer;
-	
-	
-	// higlightData.pathToStartNode = getPathTo(newStartNode);
-	// highlightData.startNodeOffset = 0;
-	// highlightData.pathToEndNode = getPathTo(newEndNode);
-	// highlightData.endNodeOffset = newEndNode.nodeValue.length;
+	let newStartNode = insertRangeWithHighlightedNode(start.containingNode, start.offset, start.containingNode.textContent.length).startContainer;
+	let newEndNode = insertRangeWithHighlightedNode(end.containingNode, 0, end.offset).startContainer;
+
 	
 	let range = document.createRange();
 	range.setStart(newStartNode, 0);
-	range.setEnd(newEndNode, newEndNode.nodeValue.length);
+	range.setEnd(newEndNode, 1);
 	highlightData.range = range;
-	
-	
-	// update necessary existing highlights to reflect DOM changes
-	// let highlightsToRecalculate = highlights.filter(h => (h.pathToStartNode === highlightData.pathToStartNode) && 
-														// (h.endNodeOffset > highlightData.startNodeOffset));  
-	// console.log('highlights to recalculate');
-	// console.log(highlightsToRecalculate);
-	
-	
 	
 	// highlight the nodes in between
 	let inBetweenNodes = getInBetweenNodes(highlightData);
 	
 	inBetweenNodes.forEach(function(node, i){
-			node.className += ' highlight';
+		console.log(node);
+		if(node.nodeType === Node.TEXT_NODE){
+			let range = document.createRange();
+			range.selectNode(node);
+			
+			var span = document.createElement(highlightedTagName);
+			span.classList.add(highlightCssClassName);
+			span.dataset.hi5Generated = true;
+			range.surroundContents(span);
+			range.detach();
+			
+			node = span;
+		
+		}
+		node.classList.add(highlightCssClassName);
 	});
 	
 }
 
 function insertRangeWithHighlightedNode(node, startIndex, endIndex){
 	
-	// surround highlighted text by 
+	console.log(`insertRangeWithHighlightedNode start i:${startIndex} end i:${endIndex}`);
+	console.log([node]);
 
 	let range = document.createRange();
 	range.setStart(node, startIndex);
@@ -384,8 +389,7 @@ function insertRangeWithHighlightedNode(node, startIndex, endIndex){
 	
 	// create new range that represents that span's text
 	let newRange = document.createRange();
-	newRange.setStart(span, 0);
-	newRange.setEnd(span, 1);
+	newRange.selectNodeContents(span);
 	return newRange;
 }
 
@@ -421,8 +425,9 @@ function getSelectionDirection(selection){
 }
 
 function getPathTo(element) {
+	
 	if (element.id!=='' && (typeof element.id !== 'undefined'))
-		return 'id("'+element.id+'")';
+		return `${element.tagName}[@id='${element.id}']`
 	if (element===document.body)
 		return element.tagName;
 
