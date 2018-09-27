@@ -2,37 +2,45 @@
 document.addEventListener('mouseup', function() {
 	
 	var selection;
-    if (window.getSelection) {
+	
+    if (window.getSelection) 
         selection = window.getSelection();
-    } else if (document.selection && document.selection.type != "Control") {
+	else if (document.selection && document.selection.type != "Control") 
         selection = document.selection.createRange();
-    }
-	else{
-		console.log('none');
+	else
+		return;
+
+	
+	if(selection.focusOffset === selection.anchorOffset)
+		return;
+	
+	if(selection.anchorNode.nodeType !== Node.TEXT_NODE || 
+		selection.focusNode.nodeType !== Node.TEXT_NODE)	{
+			console.log('focus or anchor node is not text');
 		return;
 	}
 	
-	if(!selection.isCollapsed)
-		console.log(selection);
-	
-	if(selection.type !== 'Range')
-		return;
+	console.log(selection);
 	
 	let highlightData = getHighlightDataFromSelection(selection);
 	
-	insertHighlightData(highlightData);
+	let newHighlightInserted = insertHighlightDataIfNecessary(highlightData);
 	
-	applyHighlight(highlightData);
+	if(newHighlightInserted){
+		applyHighlight(highlightData);
+		
+		let updateRequest = {
+			updatetype: UpdateType.insert,
+			highlights: highlights
+		};
+		
+		selection.collapse(selection.startContainer);
+		
+		chrome.runtime.sendMessage(updateRequest, function(){});
+	}
 	
 	
-	let updateRequest = {
-		updatetype: UpdateType.insert,
-		highlights: highlights
-	};
-	
-	chrome.runtime.sendMessage(updateRequest, function(){});
 });
-
 
 chrome.runtime.onMessage.addListener(
   function(request, sender, sendResponse) {
@@ -54,24 +62,16 @@ function getHighlightDataFromSelection(selection){
 	let startNode = selectionDirection === SelectionDirection.forward ?  selection.anchorNode : selection.focusNode;
 	let endNode = selectionDirection === SelectionDirection.forward ? selection.focusNode : selection.anchorNode;
 	let startNodeOffset = selectionDirection === SelectionDirection.forward ? selection.anchorOffset : selection.focusOffset;
-	let endNodeOffset = selectionDirection === SelectionDirection.forward ? selection.focusOffset : selection.anchorOffset;
+	let endNodeOffset = selectionDirection === SelectionDirection.forward ? selection.focusOffset - 1 : selection.anchorOffset -1;  // selection and range add 1 to the last offset
+	let startContainer = startNode.parentNode.dataset.hi5Generated === 'true' ? startNode.parentNode.parentNode : startNode.parentNode;
+	let endContainer = endNode.parentNode.dataset.hi5Generated === 'true' ? endNode.parentNode.parentNode : endNode.parentNode;
 		
-	// let highlightData = {
-					// pathToStartNode: getPathTo(startNode),
-					// startNodeOffset: startNodeOffset,
-					// startNodeTextHash: selection.toString(),
-					// pathToEndNode: getPathTo(endNode),
-					// endNodeOffset: endNodeOffset,
-					// endNodeTextHash: selection.toString(),
-					// range: void(0)
-	// };
-	
 	// TODO: we need to handle scenario where parent node is a span we created
 	
 	let highlightData = {
-		pathToStartNodeParent: getPathTo(startNode.parentNode),
+		pathToStartNodeParent: getPathTo(startContainer),
 		startOffsetRelativeToParent: getParentOffsetFromContainingNodeAndOffset(startNode, startNodeOffset),
-		pathToEndNodeParent: getPathTo(endNode.parentNode),
+		pathToEndNodeParent: getPathTo(endContainer),
 		endOffsetRelativeToParent: getParentOffsetFromContainingNodeAndOffset(endNode, endNodeOffset),
 		range: void(0)
 	};
@@ -81,7 +81,10 @@ function getHighlightDataFromSelection(selection){
 }
 
 
-function insertHighlightData(newData){
+function insertHighlightDataIfNecessary(newData){
+	
+	console.log('insertHighlightData');
+	console.log(newData);
 
 	let range = document.createRange();
 	let start = getContainingNodeAndOffsetFromParentPathAndOffset(newData.pathToStartNodeParent, newData.startOffsetRelativeToParent);
@@ -91,32 +94,45 @@ function insertHighlightData(newData){
 	range.setEnd(end.containingNode, end.offset);
 	newData.range = range;
 	
-	console.log('new range');
-	console.log(range);
-	
 	let overlaps = [];
 	let firstOverlap_i = -1;
 	let firstHighlightToTheRight_i = -1;
+	let newHighlightInserted = true;
+	
+	console.log('existing highlights');
+	console.log(highlights);
 	
 	// collect existing highlights that overlap with the new highlight
 	highlights.every(function(existingHighlight, i){
 		let newStartIsBeforeOldEnd = newData.range.compareBoundaryPoints(Range.END_TO_START, existingHighlight.range) <= 0;
 		let newEndIsAfterOldStart = newData.range.compareBoundaryPoints(Range.START_TO_END, existingHighlight.range) >= 0;
 		let newStartIsAfterOldStart = newData.range.compareBoundaryPoints(Range.START_TO_START, existingHighlight.range) >= 0;
-		
+		let newEndIsBeforeOldEnd = newData.range.compareBoundaryPoints(Range.END_TO_END, existingHighlight.range) < 0;
 		
 		//console.log(`newStartIsBeforeOldEnd: ${newStartIsBeforeOldEnd} newEndIsAfterOldStart: ${newEndIsAfterOldStart}`);
 		
 		
+		// don't include any new highlights that are completely 
+		// contained by an existing highlight
+		if(newStartIsAfterOldStart && newEndIsBeforeOldEnd)  {
+			newHighlightInserted = false;
+			return true;
+		}
+		
+		// this is a true overlap
 		if(newStartIsBeforeOldEnd && newEndIsAfterOldStart){
+						
 			overlaps.push(existingHighlight);
 			
 			if(firstOverlap_i < 0)
 				firstOverlap_i = i;
+			
 		}
 		
 		firstHighlightToTheRight_i++;
 		
+		// none of the following existing highlights overlap
+		// we can break out of this loop
 		if(!newEndIsAfterOldStart)
 			return false;
 		
@@ -128,13 +144,15 @@ function insertHighlightData(newData){
 		highlights.splice(firstHighlightToTheRight_i, 0, newData);
 	}
 	else{
-		overlaps.forEach(function(existingHighlight){
+		console.log('overlaps');
+		console.log(overlaps);
+		overlaps.every(function(existingHighlight){
 			let newStartIsAfterOldStart = newData.range.compareBoundaryPoints(Range.START_TO_START, existingHighlight.range) > 0;
 			let newEndIsBeforeOldEnd = newData.range.compareBoundaryPoints(Range.END_TO_END, existingHighlight.range) < 0;
 			
 			let existingRange = existingHighlight.range;
 			
-			//console.log(`newStartIsAfterOldStart: ${newStartIsAfterOldStart} newEndIsBeforeOldEnd: ${newEndIsBeforeOldEnd}`);
+			console.log(`newStartIsAfterOldStart: ${newStartIsAfterOldStart} newEndIsBeforeOldEnd: ${newEndIsBeforeOldEnd}`);
 			
 			if(newStartIsAfterOldStart){
 				newData.range.setStart(existingRange.startContainer, existingRange.startOffset);
@@ -148,6 +166,7 @@ function insertHighlightData(newData){
 				newData.endOffsetRelativeToParent = existingHighlight.endOffsetRelativeToParent;
 			}
 			
+			return true;
 			
 		});
 		
@@ -157,9 +176,6 @@ function insertHighlightData(newData){
 		highlights.splice(firstOverlap_i, overlaps.length, newData);
 	}
 	
-	console.log('final highlights:');
-	console.log(highlights);
-	
 	// remove overlaps
 	// we'll need to clean up the css from the replaced highlights and then detach their ranges
 	overlaps.forEach(function(replacedHighlight, i){
@@ -167,6 +183,7 @@ function insertHighlightData(newData){
 		replacedHighlight.range.detach();
 	});
 	
+	return newHighlightInserted;	
 	
 }
 
@@ -190,7 +207,6 @@ function removeHighlightCss(highlightData){
 				highlightedNode.parentNode.removeChild(highlightedNode);
 			};
 			
-			console.log(parent.childNodes);
 		}
 		else{
 			range.startContainer.classList.remove(highlightCssClassName);
@@ -201,21 +217,25 @@ function removeHighlightCss(highlightData){
 
 function getParentOffsetFromContainingNodeAndOffset(containingNode, offsetRelativeToContainingNode){
 	let parentNode = containingNode.parentNode;
+	if (parentNode.dataset.hi5Generated === 'true'){
+		containingNode = parentNode;
+		parentNode = containingNode.parentNode;
+	}
 	
 	let offsetRelativeToParent = 0;
 	
 	for(let i = 0; i < containingNode.parentNode.childNodes.length; i++){
 	  
-	  let childNode = parentNode.childNodes[i];
+	    let childNode = parentNode.childNodes[i];
 		
 		if(childNode === containingNode){
 			offsetRelativeToParent += offsetRelativeToContainingNode;
 			return offsetRelativeToParent;
 		}
-			
-		if(childNode.nodeType === Node.TEXT_NODE)
-			offsetRelativeToParent += childNode.textContent.length;
-		else if (childNode.tagName === highlightedTagName)
+				
+		if(childNode.nodeType === Node.TEXT_NODE || 
+			childNode.tagName === 'A' ||
+			childNode.tagName === highlightedTagName)
 			offsetRelativeToParent += childNode.textContent.length;
 	}
 	
@@ -227,28 +247,36 @@ function getParentOffsetFromContainingNodeAndOffset(containingNode, offsetRelati
 function getContainingNodeAndOffsetFromParentPathAndOffset(parentPath, offsetRelativeToParent){
 	
 	let parentNode = document.evaluate('//' + parentPath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
-    let charactersRemaining = offsetRelativeToParent;
+	// if(parentNode.dataset.hi5Generated === 'true')
+		// parentNode = parentNode.parentNode;
+    let charactersRemaining = offsetRelativeToParent + 1;
   
     let containingNodeAndOffset = [];
   
+	console.log([parentNode]);
+	console.log(`parentPath ${getPathTo(parentNode)} parentOffset: ${offsetRelativeToParent}`);
     for(let i = 0; i < parentNode.childNodes.length; i++){
 	  
         let childNode = parentNode.childNodes[i];
-    
-        if(childNode.nodeType === Node.TEXT_NODE || childNode.tagName === 'SPAN'){
-    
-            if(childNode.textContent.length >= charactersRemaining){
-		        containingNodeAndOffset = {
-			        containingNode: childNode,
-			        offset: charactersRemaining
-		            };
 		
-                return containingNodeAndOffset;
-            }
-            else{
-                charactersRemaining -= childNode.textContent.length;
-            }
-        }
+		if(childNode.tagName === 'SPAN' && childNode.textContent.length >= charactersRemaining){
+			return getContainingNodeAndOffsetFromParentPathAndOffset(getPathTo(childNode), charactersRemaining);
+		}
+    
+        else if(childNode.nodeType === Node.TEXT_NODE && childNode.textContent.length >= charactersRemaining){
+
+			containingNodeAndOffset = {
+				containingNode: childNode,
+				offset: charactersRemaining - 1
+				};
+	
+			return containingNodeAndOffset;
+
+		}
+		else if(childNode.nodeType === Node.TEXT_NODE || 
+			childNode.tagName === 'A' ||
+			childNode.tagName === highlightedTagName)
+			charactersRemaining -= childNode.textContent.length;
     }
   
 	throw `Error converting parent node to containing node. Path to parent:${getPathTo(parentNode)} offset:${offsetRelativeToParent}`;
@@ -261,8 +289,8 @@ function getInBetweenNodes(highlightData){
 	console.log('in between nodes:');
 	console.log(highlightData);
 	
-	if(highlightData.pathToStartNodeParent === highlightData.pathToEndNodeParent)
-		return [];
+	// if(highlightData.pathToStartNodeParent === highlightData.pathToEndNodeParent)
+		// return [];
 	
 	let sharedAncestorNode = highlightData.range.commonAncestorContainer;
 	
@@ -329,6 +357,8 @@ function getInBetweenNodes(highlightData){
 
 function applyHighlight(highlightData){
 	
+	console.log('applyHighlight');
+	console.log(highlightData);
 	// highlight first and last nodes
 	//let tempStartPath = 'BODY/DIV[2]/SECTION[1]/SECTION[1]/DIV[1]/DIV[1]/H2[1]/text()[1]';
 	let start = getContainingNodeAndOffsetFromParentPathAndOffset(highlightData.pathToStartNodeParent, highlightData.startOffsetRelativeToParent);
@@ -340,7 +370,7 @@ function applyHighlight(highlightData){
 		return;
 	}
 	
-	let newStartNode = insertRangeWithHighlightedNode(start.containingNode, start.offset, start.containingNode.textContent.length).startContainer;
+	let newStartNode = insertRangeWithHighlightedNode(start.containingNode, start.offset, start.containingNode.textContent.length - 1).startContainer;
 	let newEndNode = insertRangeWithHighlightedNode(end.containingNode, 0, end.offset).startContainer;
 
 	
@@ -366,7 +396,7 @@ function applyHighlight(highlightData){
 			
 			node = span;
 		
-		}
+		}379
 		node.classList.add(highlightCssClassName);
 	});
 	
@@ -379,7 +409,7 @@ function insertRangeWithHighlightedNode(node, startIndex, endIndex){
 
 	let range = document.createRange();
 	range.setStart(node, startIndex);
-	range.setEnd(node, endIndex);
+	range.setEnd(node, endIndex + 1);  // range expects +1 to end index
 	var span = document.createElement(highlightedTagName);
 	span.classList.add(highlightCssClassName);
 	span.dataset.hi5Generated = true;
@@ -470,3 +500,7 @@ var highlights = [];
 var SelectionDirection = Object.freeze({"forward":1, "backward":2})
 
 var UpdateType = Object.freeze({"insert":1, "remove":2});
+
+var clicks = 0;
+
+var clickTimeout;
