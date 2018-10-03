@@ -96,7 +96,7 @@ function insertHighlightDataIfNecessary(newData){
 	
 	let overlaps = [];
 	let firstOverlap_i = -1;
-	let firstHighlightToTheRight_i = -1;
+	let firstSubsequentHighlight_i = -1;
 	let newHighlightInserted = true;
 	
 	console.log('existing highlights');
@@ -110,13 +110,14 @@ function insertHighlightDataIfNecessary(newData){
 		let newEndIsBeforeOldEnd = newData.range.compareBoundaryPoints(Range.END_TO_END, existingHighlight.range) < 0;
 		
 		//console.log(`newStartIsBeforeOldEnd: ${newStartIsBeforeOldEnd} newEndIsAfterOldStart: ${newEndIsAfterOldStart}`);
+		console.log(`newStartIsAfterOldStart: ${newStartIsAfterOldStart} newEndIsBeforeOldEnd: ${newEndIsBeforeOldEnd}`);
 		
 		
 		// don't include any new highlights that are completely 
 		// contained by an existing highlight
 		if(newStartIsAfterOldStart && newEndIsBeforeOldEnd)  {
 			newHighlightInserted = false;
-			return true;
+			return false;
 		}
 		
 		// this is a true overlap
@@ -129,7 +130,7 @@ function insertHighlightDataIfNecessary(newData){
 			
 		}
 		
-		firstHighlightToTheRight_i++;
+		firstSubsequentHighlight_i++;
 		
 		// none of the following existing highlights overlap
 		// we can break out of this loop
@@ -140,10 +141,10 @@ function insertHighlightDataIfNecessary(newData){
 		
 	});
 		
-	if(overlaps.length === 0){
-		highlights.splice(firstHighlightToTheRight_i, 0, newData);
+	if(overlaps.length === 0 && firstSubsequentHighlight_i >= 0){
+		highlights.splice(firstSubsequentHighlight_i, 0, newData);
 	}
-	else{
+	else if (overlaps.length > 0){
 		console.log('overlaps');
 		console.log(overlaps);
 		overlaps.every(function(existingHighlight){
@@ -170,7 +171,7 @@ function insertHighlightDataIfNecessary(newData){
 			
 		});
 		
-		console.log(`firstHighlightToTheRight_i: ${firstHighlightToTheRight_i}, firstOverlap_i: ${firstOverlap_i}, overlaps.length ${overlaps.length}`);
+		console.log(`firstSubsequentHighlight_i: ${firstSubsequentHighlight_i}, firstOverlap_i: ${firstOverlap_i}, overlaps.length ${overlaps.length}`);
 		
 		// replace existing highlights with new overarching highlight
 		highlights.splice(firstOverlap_i, overlaps.length, newData);
